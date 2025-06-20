@@ -1,38 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
 
-function ChatService() {
-  // Stream the bot response from the backend
-  const sendMessage = async (message, onStream) => {
-    const response = await fetch('http://localhost:8000/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: message }), // send just the string
-    });
-    if (!response.body) return;
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let done = false;
-    let fullText = '';
-    while (!done) {
-      const { value, done: doneReading } = await reader.read();
-      done = doneReading;
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true });
-        fullText += chunk;
-        onStream(fullText);
-      }
-    }
-    return fullText;
-  };
-  return { sendMessage };
-}
-
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
-  const { sendMessage } = ChatService();
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,18 +15,33 @@ function App() {
     const userMsg = { sender: 'User', text: input };
     setMessages((msgs) => [...msgs, userMsg, { sender: 'Bot', text: '' }]);
     setInput('');
-    let botText = '';
-    await sendMessage(input, (streamedText) => {
-      botText = streamedText;
-      setMessages((msgs) => {
-        // Update only the last message (the bot's message)
-        const updated = [...msgs];
+
+    const response = await fetch('http://localhost:8000/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: input }), // send just the string
+    });
+    if (!response.body) return;
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+
+    while (true) {
+
+      const { value, done } = await reader.read();
+
+      if (done) break;
+
+      setMessages((prev) => {
+        const updated = [...prev];
         if (updated.length > 0 && updated[updated.length - 1].sender === 'Bot') {
-          updated[updated.length - 1] = { sender: 'Bot', text: streamedText };
+          updated[updated.length - 1] = {
+            sender: 'Bot',
+            text: (updated[updated.length - 1].text || '') + value
+          };
         }
         return updated;
       });
-    });
+
+    }
   };
 
   const handleInputKeyDown = (e) => {
