@@ -1,0 +1,8 @@
+aiohttp==3.11.14
+fastapi==0.115.8
+fastapi-cli==0.0.7
+gunicorn==23.0.0
+python-dotenv==1.0.1
+semantic-kernel==1.20.0
+azure-identity==1.19.0
+openai==1.61.1
