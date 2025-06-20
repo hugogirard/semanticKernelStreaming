@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,16 +23,24 @@ app.add_middleware(
 
 @app.post('/api/chat')
 async def chat(chat_request: ChatRequest) -> StreamingResponse:
-     return StreamingResponse(chat_service.completion(chat_request.prompt), media_type="text/plain")
+     return StreamingResponse(chat_service.completion(chat_request.id,
+                                                      chat_request.prompt), 
+                                                      media_type="text/plain")
 
-@app.post('/test-stream')
-async def test_stream():
-    async def event_generator():
-        for i in range(5):
-            yield f"chunk {i}"
-            await asyncio.sleep(1)
-    return StreamingResponse(event_generator(), media_type="text/plain")
+@app.delete('/api/chat')
+async def delete(chat_id: str) -> Response:
+    chat_service.delete_chat(chat_id)
+    return Response(status_code=204)
+     
+
+# @app.post('/test-stream')
+# async def test_stream():
+#     async def event_generator():
+#         for i in range(5):
+#             yield f"chunk {i}"
+#             await asyncio.sleep(1)
+#     return StreamingResponse(event_generator(), media_type="text/plain")
 
 @app.get('/', include_in_schema=False)
 async def root():
-    return RedirectResponse(url="/docs")       
+    return RedirectResponse(url="/docs")
