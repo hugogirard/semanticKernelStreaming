@@ -1,16 +1,19 @@
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Dict, List
 from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion, AzureChatPromptExecutionSettings
-from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.contents.chat_history import ChatHistory
 from semantic_kernel.contents import StreamingChatMessageContent
 from dotenv import load_dotenv
 from semantic_kernel import Kernel
 from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
+from message import Message
 import os
 
 class ChatService():
 
     def __init__(self):
+
+        self.history:Dict[str,List[Message]] = {}
+
         load_dotenv(override=True)
 
         credential = DefaultAzureCredential()
@@ -32,12 +35,23 @@ class ChatService():
             temperature=0.7,
             max_tokens=4000
         )   
-    
-    async def completion(self,prompt:str) -> AsyncGenerator[StreamingChatMessageContent, None]:
-
+         
+    async def completion(self,chat_id:str, prompt:str) -> AsyncGenerator[StreamingChatMessageContent, None]:
+        
         history = ChatHistory()
         history.add_system_message("You are an AI assistant")
+        messages: List[Message] = []
+
+        if self.history.get(chat_id):           
+            messages = self.history[chat_id]
+            for message in messages:
+                if message.role == "user":
+                    history.add_user_message(message.content)
+                else:
+                    history.add_assistant_message(message.content)                            
+        
         history.add_user_message(prompt)
+        messages.append(Message(role="user", content=prompt))
 
         chat_completion_service:AzureChatCompletion = self.kernel.get_service(type=AzureChatCompletion)
 
@@ -46,9 +60,15 @@ class ChatService():
             settings=self.execution_settings,
         )
 
+        content:str = ""
         async for chunk in stream:
             yield chunk.content
-            #content += chunk.content
+            content += chunk.content
             #print(chunk, end="", flush=True)  
+        
+        messages.append(Message(role="assistant", content=content))
+        self.history[chat_id] = messages
 
-        #return {"message": content}   
+    def delete_chat(self,chat_id:str) -> None:
+        if chat_id in self.history:
+            del self.history[chat_id]        
