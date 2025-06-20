@@ -1,9 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
 import './App.css';
 
+function generateGuid() {
+  // Simple GUID generator
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [chatId, setChatId] = useState(() => generateGuid());
   const chatEndRef = useRef(null);
 
   useEffect(() => {
@@ -19,17 +28,14 @@ function App() {
     const response = await fetch('http://localhost:8000/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: input }), // send just the string
+      body: JSON.stringify({ prompt: input, id: chatId }),
     });
     if (!response.body) return;
     const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
 
     while (true) {
-
       const { value, done } = await reader.read();
-
       if (done) break;
-
       setMessages((prev) => {
         const updated = [...prev];
         if (updated.length > 0 && updated[updated.length - 1].sender === 'Bot') {
@@ -40,7 +46,6 @@ function App() {
         }
         return updated;
       });
-
     }
   };
 
@@ -48,7 +53,14 @@ function App() {
     if (e.key === 'Enter') handleSend();
   };
 
-  const handleClear = () => setMessages([]);
+  const handleClear = async () => {
+    // Call backend to delete chat history for this chat_id
+    await fetch(`http://localhost:8000/api/chat?chat_id=${chatId}`, {
+      method: 'DELETE',
+    });
+    setMessages([]);
+    setChatId(generateGuid()); // New chat session
+  };
 
   return (
     <div className="chat-container">
